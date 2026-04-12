@@ -208,3 +208,6 @@ __marimo__/
 
 # venv
 VisionFlowAI/
+
+test/*.pt
+*.pt
