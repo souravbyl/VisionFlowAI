@@ -5,9 +5,13 @@ class VFAIConfig:
         self._verbose = False
         
         self._source = None
+        self._source_fps = 0.0
+
         self._target_width = 0
         self._target_height = 0
         self._target_fps = 0
+
+        self._drop_frames_to_match_in_fps = False
     
     def get_threshold(self):
         return self._threshold
@@ -20,6 +24,9 @@ class VFAIConfig:
     
     def get_source(self):
         return self._source
+
+    def get_source_fps(self):
+        return self._source_fps
     
     def _get_target_width(self):
         return self._target_width
@@ -29,3 +36,6 @@ class VFAIConfig:
     
     def _get_target_fps(self):
         return self._target_fps
+    
+    def _is_drop_frames_to_match_in_fps(self):
+        return self._drop_frames_to_match_in_fps
