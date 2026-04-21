@@ -1,100 +1,148 @@
 import cv2
-import threading
 import time
-from vfaiconfig import VFAIConfig
-from vfaistat import VFAIStat
+import logging
+import threading
 from vfaiqueue import VFAIQueue
 from vfaiframe import VFAIFrame
+from vfaiconfig import VFAIConfig
 
 class VFAISource:
-    def __init__(self, config: VFAIConfig, qsize=10, name="Worker-VFAISource"):
-        self.name = name
-        self._stop_event = threading.Event()
-        self._thread = None
+    def __init__(self, config: VFAIConfig, qsize: int=10, name: str="Worker-VFAISource"):
+        # class internals
+        self.__name: str = name
 
-        self._qsize = qsize
-        self._cap = None
-        self._config = config
-        self._stat = VFAIStat()
-        self._frame_queue = VFAIQueue(qsize)
+        # thread/event related
+        self.__thread = None
+        self.__stop_event = threading.Event()
+        self.__stop_called = False
+
+        # source queue
+        self.__frame_queue = VFAIQueue(qsize)
+
+        # general config object
+        self.__config = config
+
+        # opencv video capture obj
+        self.__cap: cv2.VideoCapture | None = None
+
+        self.__logger = logging.getLogger(__name__)
+
+        self.__frame_count = 0
 
     def start(self):
-        if self._thread and self._thread.is_alive():
+        if self.__thread and self.__thread.is_alive():
             return
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, name=self.name)
-        self._thread.start()
-
-    def _run(self):
-        try:
-            self.run()
-        finally:
-            self.cleanup()
-
-    def run(self):
-        self._init_source()
-        try:
-            start = time.time()
-            while not self._stop_event.is_set():
-                self._stat.add_in()
-                ret, frame = self._cap.read()
-                if not ret:
-                    self._stat.add_err()
-                    self._deinit_source()
-                    self._init_source()
-                    continue
-                self._stat.add_ok()
-                frame = cv2.resize(frame, (self._new_w, self._new_h))
-                vframe = VFAIFrame(data=frame,
-                                   since_start=time.time() - start,
-                                   epoch=time.time()
-                                   )
-                self._frame_queue.enqueue(vframe)
-        finally:
-            self._deinit_source()
-            pass
+        self.__stop_event.clear()
+        self.__thread = threading.Thread(target=self.__run, name=self.__name)
+        self.__thread.start()
 
     def stop(self):
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join()
+        if not self.__stop_called:
+            self.__stop_called = True
+            self.__stop()
+            self.__stop_called = False
 
-    def should_stop(self):
-        return self._stop_event.is_set()
-
-    def cleanup(self):
-        self._deinit_source()
-
-    def _deinit_source(self):
-        if self._cap:
-            self._cap.release()
-            print('Source released.')
-            self._cap = None
-    
-    def _init_source(self):
-        print('Initializing source...')
-        self._deinit_source()
-        self._cap = cv2.VideoCapture(self._config.get_source())
-        self._src_width = self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        self._src_height = self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        fps = self._cap.get(cv2.CAP_PROP_FPS)
-        self._src_fps = int(round(fps)) if fps > 0 else 30  # fallback
-        self._src_aspect_ratio = self._src_width / self._src_height
-        print(f"Source frame dimensions: {self._src_width} x {self._src_height}, "
-              f"Aspect ratio: {self._src_aspect_ratio}, FPS: {self._src_fps}")
-
-        scale = min(self._config._get_target_width() / self._src_width,
-                    self._config._get_target_height() / self._src_height)
-        self._new_w = int(self._src_width * scale)
-        self._new_h = int(self._src_height * scale)
-        print(f"New frame dimensions: {self._new_w} x {self._new_h}")
-
-        self._config._source_fps = self._src_fps
-        
-    
     def get_frame(self):
         try:
-            frame = self._frame_queue.dequeue()
+            frame = self.__frame_queue.dequeue()
+            # if self.__config.verbose and frame is not None:# and self.__frame_count - frame > 1000:
+            #     self.__logger.debug(f'Dequeued frame ID{frame._id}. Framecount {self.__frame_count}; '
+            #                         f'Diff {self.__frame_count-frame._id}.')
             return frame
         finally:
             pass
+
+    def __run(self):
+        try:
+            self.__run_impl()
+        finally:
+            self.__cleanup()
+
+    def __stop(self):
+        self.__stop_event.set()
+        if self.__thread:
+            self.__thread.join()
+        self.__thread = None
+
+    def __cleanup(self):
+        self.__deinit_source()
+
+    def __deinit_source(self):
+        if self.__cap is not None:
+            self.__cap.release()
+            self.__logger.warning('Source released.')
+            self.__cap = None
+
+    def __run_impl(self):
+        self.__init_source()
+        try:
+            start = time.time()
+            if self.__config.verbose:
+                    self.__logger.debug(f'Starting grabbing at {time.time()}')
+            while not self.__stop_event.is_set():
+                if self.__cap is None:
+                    raise ValueError('Capture object is None')
+                ret, frame = self.__cap.read()
+                if not ret:
+                    if self.__config.reconnect_source_on_failure:
+                        self.__deinit_source()
+                        self.__logger.info(f'Will reconnect source.')
+                        self.__init_source()
+                        continue
+                    else:
+                        self.__logger.error(f'Will not reconnect source.')
+                        break
+                vframe = VFAIFrame(id=self.__frame_count,
+                                   data=frame,
+                                   since_start=time.time() - start,
+                                   epoch=time.time()
+                                   )
+                if self.__config.target.width > 0 and self.__config.target.height > 0:
+                    frame = cv2.resize(frame, (self.__config.target.width, self.__config.target.height))
+                self.__frame_queue.enqueue(vframe)
+                self.__frame_count += 1
+                # if self.__config.verbose and self.__frame_count % 1000 == 0:
+                #     self.__logger.debug(f'Enqueued {self.__frame_count} frames.')
+        finally:
+            if self.__config.verbose:
+                self.__logger.debug(f'Deinitialize source at {time.time()}')
+            self.__deinit_source()
+
+    def __init_source(self):
+        self.__logger.info('Initializing source...')
+        self.__cap = cv2.VideoCapture(self.__config.source.url)
+
+        if self.__cap is None:
+            raise ValueError('Could not initialize source!')
+            return
+
+        # after init, set values to source
+        self.__config.source.width = int(self.__cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.__config.source.height = int(self.__cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = self.__cap.get(cv2.CAP_PROP_FPS)
+        self.__config.source.fps = int(round(fps)) if fps > 0 else 25  # fallback
+        self.__config.source.aspect_ratio = self.__config.source.width / self.__config.source.height
+        self.__logger.info(f"Source frame dimensions: {self.__config.source.width:.0f} x {self.__config.source.height:.0f}, "
+              f"Aspect ratio: {self.__config.source.aspect_ratio:.0f}, FPS: {self.__config.source.fps:.0f}")
+
+        if self.__config.target.width > 0 and self.__config.target.height > 0:
+            scale = min(self.__config.target.width / self.__config.source.width,
+                        self.__config.target.height / self.__config.source.height)
+            self.__config.target.width = int(self.__config.source.width * scale)
+            self.__config.target.height = int(self.__config.source.height * scale)
+            self.__logger.info(f"New frame dimensions: {self.__config.target.width} x {self.__config.target.height}")
+        else:
+            self.__logger.info(f"No target frame dimensions set. Using source dimensions. {self.__config.source.width} x {self.__config.source.height}")
+
+        # if there is no specific ROI saved; use the full frame
+        if not self.__config.roi.is_set():
+            if self.__config.target.width > 0 and self.__config.target.height > 0:
+                self.__config.roi = (0, 0, self.__config.target.width, self.__config.target.height)
+                self.__logger.info(f"ROI Set to target dimensions: (0, 0) to ({self.__config.target.width}, {self.__config.target.height})")
+            else:
+                self.__config.roi = (0, 0, self.__config.source.width, self.__config.source.height)
+                self.__logger.info(f"ROI Set to source dimensions: (0, 0) to ({self.__config.source.width}, {self.__config.source.height})")
+        else:
+            x1, y1 = self.__config.roi.top_left.xy
+            x2, y2 = self.__config.roi.bottom_right.xy
+            self.__logger.info(f"ROI already set to: f({x1}, {y1}), ({x2}, {y2})")

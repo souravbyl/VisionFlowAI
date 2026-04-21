@@ -1,27 +1,29 @@
+import logging
 import numpy as np
 from ultralytics import YOLO
 from vfaiconfig import VFAIConfig
-from vfaistat import VFAIStat
 
 class VFAIDetector:
     def __init__(self, config: VFAIConfig):
-        self._config = config
-        self._stat = VFAIStat()
-        self._model = YOLO(self._config.get_model())
-        self._warmup()
+        self.__config = config
+        self.__model = YOLO(self.__config.model)
+        self.__warmed_up = False
+        self.__logger = logging.getLogger(__name__)
     
-    def _warmup(self):
-        dummy = np.zeros((256, 256, 3), dtype=np.uint8)
+    def __warmup(self):
+        dummy = np.zeros((self.__config.source.height, self.__config.source.width, 3), dtype=np.uint8)
         for _ in range(5):
-            self._model(dummy, verbose=False)
+            self.__model(dummy, verbose=False)
 
-    def detect(self, frame, threshold=None):
-        self._stat.add_in()
-        results = self._model(frame,
-                              verbose=self._config.get_verbosity(),
-                              conf=self._config.get_threshold() if threshold is None else threshold)
-        if len(results[0].boxes):
-            self._stat.add_ok()
-        else:
-            self._stat.add_err()
-        return results
+    def detect(self, frame):
+        if not self.__warmed_up:
+            self.__logger.info('Engine warmup started.')
+            self.__warmup()
+            self.__logger.info('Engine warmup completed.')
+            self.__warmed_up = True
+        return self.__model(frame,
+                            verbose=False, # self.__config.verbose,
+                            conf=self.__config.threshold)
+
+    def get_class_name(self, cls_id):
+        return self.__model.names[cls_id]

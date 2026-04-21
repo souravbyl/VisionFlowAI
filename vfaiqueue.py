@@ -1,12 +1,15 @@
+import logging
+
 class VFAIQueue:
     def __init__(self, size):
         self.size = size
         self.queue = [None] * self.size
         self.rear = self.front = -1
+        self.__logger = logging.getLogger(__name__)
 
     def enqueue(self, element):
         if self.front == (self.rear + 1) % self.size:
-            print('Queue is full')
+            self.__logger.fatal('Queue is full, might lead to drop.')
             return None
         if self.front == -1:
             self.front = 0
@@ -15,7 +18,6 @@ class VFAIQueue:
     
     def dequeue(self):
         if self.front == -1:
-            # print('Queue is empty')
             return None
         element = self.queue[self.front]
         self.queue[self.front] = None
@@ -24,19 +26,3 @@ class VFAIQueue:
         else:
             self.front = (self.front+1) % self.size
         return element
-    
-    # Function to display the elements of the queue
-    def displayQueue(self):
-        if self.front == -1:
-            print("Queue is Empty")
-            return
-        print("Elements in the Circular Queue are: ")
-        if self.rear >= self.front:
-            for i in range(self.front, self.rear + 1):
-                print(self.queue[i], end=" ")
-        else:
-            for i in range(self.front, self.size):
-                print(self.queue[i], end=" ")
-            for i in range(0, self.rear + 1):
-                print(self.queue[i], end=" ")
-        print()
