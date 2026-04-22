@@ -39,18 +39,18 @@ def main():
 
     config = VFAIConfig()
 
-    config.debug = True
+    config.debug = False
     config.verbose = config.debug
     config.dump_results = True
     config.results_dump_path = 'dumps'
 
     config.model = "yolov8n.pt"
     config.threshold = 0.3
-    config.d_imshow = True
+    config.d_imshow = False
 
     config.source.url = source
     config.reconnect_source_on_failure = False
-    config.source_imshow = True
+    config.source_imshow = False
     config.drop_frames_to_match_in_fps = False
     if x1 is not None:
         config.roi = (x1, y1, x2, y2)

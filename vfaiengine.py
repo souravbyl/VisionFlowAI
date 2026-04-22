@@ -107,16 +107,17 @@ class VFAIEngine:
             if self.__config.enable_tracker and tracking and tracker is not None:
                 ok, trackerbbox = tracker.update(roiframe)
                 if ok:
-                    x, y, w, h = map(int, trackerbbox)
-                    cv2.rectangle(roiframe, (x, y), (x+w, y+h), COLOR_TRACK, 2)
                     if self.__config.d_imshow:
+                        x, y, w, h = map(int, trackerbbox)
+                        cv2.rectangle(roiframe, (x, y), (x+w, y+h), COLOR_TRACK, 2)
                         CV_Show("Tracking", roiframe)
 
                     if vfaiframe._id - last_detect_frame > redirect_interval:
                         self.__logger.debug('tracker left for redirection reason')
                         tracking = False
                     else:
-                        self.__logger.debug('tracking..')
+                        if self.__config.debug:
+                            self.__logger.debug('tracking..')
                         pass
                     pass
                 else:
