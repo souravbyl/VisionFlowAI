@@ -1,5 +1,4 @@
 import cv2
-import json
 import time
 import psutil
 import logging
@@ -16,6 +15,7 @@ from vfaiconfig import VFAIConfig
 from vfaisource import VFAISource
 from vfaidetect import VFAIDetector
 from vfaitracker import VFAITracker
+from vfaievent_dispatcher import VFAIEventDispatcher
 
 class VFAIEngine:
     def __init__(self, config: VFAIConfig, name="Worker-VFAIEngine"):
@@ -26,6 +26,7 @@ class VFAIEngine:
         self.__source = VFAISource(config=self.__config, qsize=360000)
         self.__detector = VFAIDetector(config=self.__config)
         self.__motion = VFAIMotion(config=self.__config)
+        self.__event_dispatcher = VFAIEventDispatcher(self.__config)
         self.__logger = logging.getLogger(__name__)
 
     def start(self):
@@ -43,16 +44,14 @@ class VFAIEngine:
 
     def __run_impl(self):
         self.__source.start()
-
-        objects = {}
-        occurances = {}
+        self.__event_dispatcher.start()
 
         detection_id = 0
 
         tracker = None
         tracking = False
-        # last_detect_frame = 0
-        # redirect_interval = 100
+        last_detect_frame = 0
+        redirect_interval = 400
 
         while not self.__stop_event.is_set():
 
@@ -94,13 +93,13 @@ class VFAIEngine:
             motion_x1, motion_y1 = motion_x+motion_w, motion_y+motion_h
             motion_roi = roiframe[motion_y:motion_y1, motion_x:motion_x1]
             
-            # if self.__config.debug:
-            #     # self.__logger.debug(f'Motion detected at ({motion_x}, {motion_y}), ({motion_x1}, {motion_y1}), '
-            #     #                     f'Motion Detection Time {(motion_endT-motion_startT):.2f}s')
-            #     if self.__config.d_imshow:
-            #         # CV_Show("Motion(Cropped)", motion_roi)
-            #         # cv2.rectangle(roiframe, (motion_x, motion_y), (motion_x1, motion_y1), COLOR_MOTION, 2)
-            #         CV_Show("Motion(Full Frame)", roiframe)
+            if self.__config.debug:
+                self.__logger.debug(f'Motion detected at ({motion_x}, {motion_y}), ({motion_x1}, {motion_y1}), '
+                                    f'Motion Detection Time {(motion_endT-motion_startT):.2f}s')
+                if self.__config.d_imshow:
+                    CV_Show("Motion(Cropped)", motion_roi)
+                    cv2.rectangle(roiframe, (motion_x, motion_y), (motion_x1, motion_y1), COLOR_MOTION, 2)
+                    CV_Show("Motion(Full Frame)", roiframe)
 
             # =========================================================
             # TRACKING MODE
@@ -108,20 +107,21 @@ class VFAIEngine:
             if self.__config.enable_tracker and tracking and tracker is not None:
                 ok, trackerbbox = tracker.update(roiframe)
                 if ok:
-                    # x, y, w, h = map(int, trackerbbox)
-                    # cv2.rectangle(roiframe, (x, y), (x+w, y+h), COLOR_TRACK, 2)
-                    # if self.__config.d_imshow:
-                    #     CV_Show("Tracking", roiframe)
+                    x, y, w, h = map(int, trackerbbox)
+                    cv2.rectangle(roiframe, (x, y), (x+w, y+h), COLOR_TRACK, 2)
+                    if self.__config.d_imshow:
+                        CV_Show("Tracking", roiframe)
 
-                    # if vfaiframe._id - last_detect_frame > redirect_interval:
-                    #     self.__logger.debug('tracker left for redirection reason')
-                    #     tracking = False
-                    # else:
-                    #     # self.__logger.debug('tracking..')
-                    #     pass
+                    if vfaiframe._id - last_detect_frame > redirect_interval:
+                        self.__logger.debug('tracker left for redirection reason')
+                        tracking = False
+                    else:
+                        self.__logger.debug('tracking..')
+                        pass
                     pass
                 else:
-                    self.__logger.debug('tracker left as new object')
+                    if self.__config.debug:
+                        self.__logger.debug('tracker left as new object')
                     tracking = False
 
             # perform object detection
@@ -144,13 +144,13 @@ class VFAIEngine:
                 if self.__config.drop_frames_to_match_in_fps:
                     to_drop = int((elapsed * 1000)/(1000/self.__config.source.fps))
 
-                # if self.__config.debug:
-                #     self.__logger.info(f'captured at {vfaiframe._epoch:.0f}, detected at {nowt:.0f} '
-                #         f'Diff {elapsed:.0f}s, '
-                #         f'Inference Time {(detection_endT-detection_startT):.2f}s, '
-                #         f'Source FPS: {self.__config.source.fps}, '
-                #         f'to_drop: {to_drop} frames, '
-                #         )
+                if self.__config.debug:
+                    self.__logger.info(f'captured at {vfaiframe._epoch:.0f}, detected at {nowt:.0f} '
+                        f'Diff {elapsed:.0f}s, '
+                        f'Inference Time {(detection_endT-detection_startT):.2f}s, '
+                        f'Source FPS: {self.__config.source.fps}, '
+                        f'to_drop: {to_drop} frames, '
+                        )
                 
                 to_drop -= int(to_drop*0.20)
                 if self.__config.drop_frames_to_match_in_fps:
@@ -174,15 +174,6 @@ class VFAIEngine:
 
                     dx1, dy1, dx2, dy2 = boxes[i]
                     dx1, dy1, dx2, dy2 = int(dx1), int(dy1), int(dx2), int(dy2)
-                    conf = float(scores[i])
-                    cls_id = int(class_ids[i])
-                    cls_name = self.__detector.get_class_name(cls_id)
-
-                    # if self.__config.debug:
-                    #     self.__logger.debug(f'Event detected at ({dx1}, {dy1}), ({dx2}, {dy2})')
-                    #     if self.__config.d_imshow:
-                    #         # cv2.rectangle(motion_roi, (dx1, dy1), (dx2, dy2), COLOR_DETECT, 2)
-                    #         CV_Show("Detection", motion_roi)
                     
                     # map to roiframe
                     dx1_full = int(motion_x + dx1)
@@ -194,46 +185,27 @@ class VFAIEngine:
                     tracker = VFAITracker(self.__config, description=f'tracker_{vfaiframe._id}')
                     tracker.init(roiframe, (dx1_full, dy1_full, int(dx2_full - dx1_full), int(dy2_full - dy1_full)))
                     tracking = True
-                    # last_detect_frame = vfaiframe._id
-                    self.__logger.debug(f'Tracker {vfaiframe._id} started.')
-                    
-                    occ = {
-                        'name': cls_name,
-                        'class_id': cls_id,
-                        'confidence': f'{conf:.2f}',
-                        "since_start": f'{vfaiframe._since_start:.2f}',
-                        "epoch": f'{vfaiframe._epoch:.0f}',
-                        "detected_at": f'{nowt:.0f}',
-                        'input_frame_id': f'{vfaiframe._id}'
-                    }
-
-                    occurances[detection_id] = occ
-                    objects[cls_name] = objects.get(cls_name, 0) + 1
-
-                    occ_str = json.dumps(occ)
-                    self.__logger.info(occ_str)
-                    self.__logger.info(f'{cls_name} ++ ====> {objects[cls_name]}')
-
+                    last_detect_frame = vfaiframe._id
                     if self.__config.debug:
-                        cv2.rectangle(roiframe, (dx1_full, dy1_full), (dx2_full, dy2_full), COLOR_DETECT, 2)
+                        self.__logger.debug(f'Tracker {vfaiframe._id} started.')
+
+                    confidence = float(scores[i])
+                    class_id = int(class_ids[i])
+                    class_name = self.__detector.get_class_name(class_id)
+                    
+                    snap = cv2.rectangle(roiframe, (dx1_full, dy1_full), (dx2_full, dy2_full), COLOR_DETECT, 2)
+                    self.__event_dispatcher.dispatch_event(vfaiframe=vfaiframe, detection_id=detection_id,
+                                                           class_id=class_id, class_name=class_name,
+                                                           confidence=confidence, eventtime=nowt,
+                                                           snap=snap,
+                                                           bbox=(dx1_full, dy1_full, dx2_full, dy2_full))
+
+                    if self.__config.d_imshow:
                         cv2.putText(roiframe,
-                                    f"{cls_name} {conf:.2f}",
+                                    f"{class_name} {confidence:.2f}",
                                     (dx1_full, dy1_full - 10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_DETECT, 2)
-
-                        if self.__config.d_imshow:
-                            CV_Show("Detection(Full)", roiframe)
-
-                    # Dump image and json
-                    if self.__config.dump_results:
-                        fname = f"F{vfaiframe._id}-D{detection_id}_C{cls_name}-P{conf:.0f}"
-                        if len(self.__config.results_dump_path) > 0:
-                            fname = f"{self.__config.results_dump_path}/{fname}"
-                        cv2.imwrite(f"{fname}.jpg", roiframe)
-                        # cv2.imwrite(f"{fname}_full.jpg", vfaiframe._data)
-                        with open(f"{fname}.json", "w") as f:
-                            json.dump(occ, f)
-                            # self.__logger.info(f'Detection saved in {fname}.json')
+                        CV_Show("Detection(Full)", roiframe)
                 
                     detection_id += 1
 
@@ -243,6 +215,7 @@ class VFAIEngine:
             self.__thread.join()
 
     def __cleanup(self):
+        self.__event_dispatcher.stop()
         self.__source.stop()
         if self.__config.debug:
             cv2.destroyAllWindows()

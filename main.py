@@ -28,8 +28,8 @@ def main():
     # source = 'C:/Users/soura/Downloads/istockphoto-1162603138-640_adpp_is.mp4'
     # source = 'C:/Users/soura/Downloads/VID_20260414_095729357.mp4'
 
-    source = 'C:/Users/soura/Downloads/sb/Channel ID_18_3.mp4'
-    # source = 'C:/Users/soura/Downloads/sb/Channel ID_20_1.mp4'
+    # source = 'C:/Users/soura/Downloads/sb/Channel ID_18_3.mp4'
+    source = 'C:/Users/soura/Downloads/sb/Channel ID_20_1.mp4'
 
     # source = 'rtsp://admin:admin@123@192.168.0.150/cam/realmonitor?channel=01&subtype=00'
     # x1, y1, x2, y2 = 922, 284, 1129, 502
@@ -45,7 +45,7 @@ def main():
     config.results_dump_path = 'dumps'
 
     config.model = "yolov8n.pt"
-    config.threshold = 0.7
+    config.threshold = 0.3
     config.d_imshow = True
 
     config.source.url = source
