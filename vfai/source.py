@@ -5,18 +5,18 @@ from queue import Queue
 
 import cv2
 
-from metrics.event import MetricEvent
-from vfaiconfig import VFAIConfig
-from vfaiframe import VFAIFrame
-from vfaiqueue import VFAIQueue
-from vfaitimeboundedqueue import TimeBoundedQueue
-from vfaiframebuffer import VFAIFrameBuffer
+from vfai.metrics.event import MetricEvent
+from vfai.framebuffer import FrameBuffer
+from vfai.timeboundedqueue import TimeBoundedQueue
+from vfai.config import Config
+from vfai.frame import Frame
+from vfai.cqueue import CQueue
 
 
-class VFAISource:
+class Source:
     def __init__(
         self,
-        config: VFAIConfig,
+        config: Config,
         metrics_q: Queue,
         stop_event: threading.Event,
         qsize: int = 10,
@@ -29,8 +29,8 @@ class VFAISource:
         self.__stop_event = stop_event
 
         # source queue
-        self.__frame_queue = VFAIQueue(qsize)
-        # self.__frame_queue = VFAIFrameBuffer()
+        self.__frame_queue = CQueue(qsize)
+        # self.__frame_queue = FrameBuffer()
         # self.__frame_queue = TimeBoundedQueue(
         #     metrics_q=metrics_q,
         #     max_age_sec=10,#self.__config.queue.max_age_sec,   # e.g. 1–2 sec
@@ -118,7 +118,7 @@ class VFAISource:
                         else:
                             self.__logger.error(f"Will not reconnect source.")
                             break
-                    vframe = VFAIFrame(
+                    vframe = Frame(
                         id=self.__frame_count,
                         data=frame,
                         since_start=t_capture - start,

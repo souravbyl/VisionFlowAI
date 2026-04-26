@@ -3,11 +3,11 @@ import logging
 import numpy as np
 from ultralytics import YOLO
 
-from vfaiconfig import VFAIConfig
+from vfai.config import Config
 
 
-class VFAIDetector:
-    def __init__(self, config: VFAIConfig):
+class Detector:
+    def __init__(self, config: Config):
         self.__config = config
         self.__model = YOLO(self.__config.model)
         self.__logger = logging.getLogger(__name__)

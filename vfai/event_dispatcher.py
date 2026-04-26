@@ -6,17 +6,17 @@ import time
 
 import cv2
 
-from vfaiconfig import VFAIConfig
-from vfaiqueue import VFAIQueue
+from vfai.config import Config
+from vfai.cqueue import CQueue
 
 
-class VFAIEventDispatcher:
+class EventDispatcher:
     def __init__(
         self,
-        config: VFAIConfig,
+        config: Config,
         stop_event: threading.Event,
         qsize: int = 10,
-        name: str = "VFAIEventDispatcher",
+        name: str = "EventDispatcher",
     ) -> None:
         # class internals
         self.__name: str = name
@@ -29,7 +29,7 @@ class VFAIEventDispatcher:
         self.__stop_event = stop_event
 
         # event queue
-        self.__event_queue = VFAIQueue(qsize)
+        self.__event_queue = CQueue(qsize)
 
         self.__logger = logging.getLogger(f"{__name__}")
 
@@ -39,7 +39,7 @@ class VFAIEventDispatcher:
 
     def dispatch_event(
         self,
-        vfaiframe,
+        frame,
         detection_id,
         class_id,
         class_name,
@@ -53,10 +53,10 @@ class VFAIEventDispatcher:
             "class_name": class_name,
             "class_id": class_id,
             "confidence": f"{confidence:.2f}",
-            "since_start": f"{vfaiframe._since_start:.2f}",
-            "epoch": f"{vfaiframe._epoch:.0f}",
+            "since_start": f"{frame._since_start:.2f}",
+            "epoch": f"{frame._epoch:.0f}",
             "detected_at": f"{eventtime:.0f}",
-            "input_frame_id": f"{vfaiframe._id}",
+            "input_frame_id": f"{frame._id}",
             "snap": snap,
         }
         self.__event_queue.enqueue(event)

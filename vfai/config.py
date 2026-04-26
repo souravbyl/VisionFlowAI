@@ -1,10 +1,10 @@
 import logging
 
-from vfairoi import VFAIROI
-from vfaistreamprop import VFAIStreamProp
+from vfai.roi import ROI
+from vfai.streamprop import StreamProperties
 
 
-class VFAIConfig:
+class Config:
     def __init__(self):
         self.__logger = logging.getLogger(__name__)
 
@@ -39,19 +39,17 @@ class VFAIConfig:
         ######################################################################################
         ############################# Source related #########################################
         ######################################################################################
-        self.__source: VFAIStreamProp = VFAIStreamProp()  # actual source params
+        self.__source: StreamProperties = StreamProperties()  # actual source params
         self.__source_reconnect_on_failure = (
             True  # reconnect/restart source if fails/ends
         )
-        self.__roi: VFAIROI = VFAIROI()  # ROI; for the time being, we are
+        self.__roi: ROI = ROI()  # ROI; for the time being, we are
         # allowing one ROI
 
         ######################################################################################
         ############################# Target related #########################################
         ######################################################################################
-        self.__target: VFAIStreamProp = (
-            VFAIStreamProp()
-        )  # target params; modified from source
+        self.__target: StreamProperties = StreamProperties()  # target params; modified from source
 
         ######################################################################################
         ############################# Motion related #########################################

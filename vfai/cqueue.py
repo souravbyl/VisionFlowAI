@@ -1,7 +1,7 @@
 import logging
 
 
-class VFAIQueue:
+class CQueue:
     def __init__(self, size):
         self.size = size
         self.queue = [None] * self.size

@@ -1,4 +1,4 @@
-class VFAICoordinate:
+class Coordinate:
     def __init__(self, x: int = 0, y: int = 0) -> None:
         self.__x: int = x
         self.__y: int = y

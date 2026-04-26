@@ -1,9 +1,9 @@
 app:
   debug: true
-  loglevel: i
+  loglevel: d
 
 display:
-  imshow_source_frames: false
+  imshow_source_frames: true
   imshow_motion_threshold: false
   imshow_motion_results: false
   imshow_tracker_results: false
@@ -27,7 +27,7 @@ source:
     y2: null
 
 motion:
-  percent: 0.02
+  percent: 0.002
 
 tracker:
   enabled: true

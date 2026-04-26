@@ -6,35 +6,35 @@ from queue import Queue
 import cv2
 import numpy as np
 
-from cv_util import CV_Show
-from metrics.event import MetricEvent
-from vfaicolorcode import COLOR_MOTION, COLOR_TRACK, COLOR_DETECT
-from vfaiconfig import VFAIConfig
-from vfaidetect import VFAIDetector
-from vfaievent_dispatcher import VFAIEventDispatcher
-from vfaimotion import VFAIMotion
-from vfaisource import VFAISource
-from vfaitracker import VFAITracker
+from vfai.cv_util import CV_Show
+from vfai.metrics.event import MetricEvent
+from vfai.colorcode import COLOR_MOTION, COLOR_TRACK, COLOR_DETECT
+from vfai.config import Config
+from vfai.detector import Detector
+from vfai.event_dispatcher import EventDispatcher
+from vfai.motion import Motion
+from vfai.source import Source
+from vfai.tracker import Tracker
 
 
-class VFAIEngine:
+class Engine:
     def __init__(
-        self, config: VFAIConfig, metrics_q: Queue, stop_event: threading.Event
+        self, config: Config, metrics_q: Queue, stop_event: threading.Event
     ):
         self.__name = "Worker-VFAIEngine"
         self.__stop_event = stop_event
         self.__thread = None
         self.__config = config
         self.__metrics_q = metrics_q
-        self.__source = VFAISource(
+        self.__source = Source(
             config=self.__config,
             stop_event=stop_event,
             metrics_q=metrics_q,
             qsize=360000,
         )
-        self.__detector = VFAIDetector(config=self.__config)
-        self.__motion = VFAIMotion(config=self.__config)
-        self.__event_dispatcher = VFAIEventDispatcher(
+        self.__detector = Detector(config=self.__config)
+        self.__motion = Motion(config=self.__config)
+        self.__event_dispatcher = EventDispatcher(
             self.__config, stop_event=stop_event
         )
         self.__logger = logging.getLogger(__name__)
@@ -73,8 +73,8 @@ class VFAIEngine:
         # warmup the engine only after receiving the first frame
         warmup_complete = False
         while (not self.__stop_event.is_set()) and (not warmup_complete):
-            vfaiframe = self.__source.get_frame()
-            if vfaiframe is None:
+            frame = self.__source.get_frame()
+            if frame is None:
                 time.sleep(0.001)
                 continue
             t_start = time.perf_counter()
@@ -85,7 +85,7 @@ class VFAIEngine:
                 MetricEvent(
                     stage="engine",
                     event="out",
-                    t_capture=vfaiframe._epoch,
+                    t_capture=frame._epoch,
                     t_start=t_start,
                     t_end=time.perf_counter(),
                 )
@@ -110,9 +110,9 @@ class VFAIEngine:
                 if cv2.waitKey(1) == ord("q"):
                     pass
 
-            vfaiframe = self.__source.get_frame()
-            # vfaiframe, last_version = self.__source.get_frame(last_version)
-            if vfaiframe is None:
+            frame = self.__source.get_frame()
+            # frame, last_version = self.__source.get_frame(last_version)
+            if frame is None:
                 time.sleep(0.001)
                 continue
 
@@ -125,7 +125,7 @@ class VFAIEngine:
                 roi_x2, roi_y2 = self.__config.roi.bottom_right.xy
 
                 x, y, w, h = roi_x1, roi_y1, (roi_x2 - roi_x1), (roi_y2 - roi_y1)
-                roiframe = vfaiframe._data[y : y + h, x : x + w]
+                roiframe = frame._data[y : y + h, x : x + w]
 
                 if self.__config.imshow_source_frames:
                     CV_Show("Source", roiframe)
@@ -204,7 +204,7 @@ class VFAIEngine:
                     ):
                         ok, trackerbbox = tracker.update(roiframe)
                         if ok:
-                            if vfaiframe._id - last_detect_frame > redirect_interval:
+                            if frame._id - last_detect_frame > redirect_interval:
                                 self.__logger.debug(
                                     "tracker left for redirection reason"
                                 )
@@ -253,11 +253,11 @@ class VFAIEngine:
                             self.__logger.debug("Response from detector")
 
                         nowt = time.perf_counter()
-                        elapsed = nowt - vfaiframe._epoch
+                        elapsed = nowt - frame._epoch
 
                         if self.__config.debug:
                             self.__logger.info(
-                                f"captured at {vfaiframe._epoch:.0f}, detected at {nowt:.0f} "
+                                f"captured at {frame._epoch:.0f}, detected at {nowt:.0f} "
                                 f"Diff {elapsed:.0f}s, "
                                 f"Inference Time {(detection_endT - detection_startT):.2f}s, "
                                 f"Source FPS: {self.__config.source.fps}, "
@@ -288,8 +288,8 @@ class VFAIEngine:
                             dy2_full = int(motion_y + dy2)
 
                             # -------- INIT TRACKER --------
-                            tracker = VFAITracker(
-                                self.__config, description=f"tracker_{vfaiframe._id}"
+                            tracker = Tracker(
+                                self.__config, description=f"tracker_{frame._id}"
                             )
                             tracker.init(
                                 roiframe,
@@ -301,9 +301,9 @@ class VFAIEngine:
                                 ),
                             )
                             tracking = True
-                            last_detect_frame = vfaiframe._id
+                            last_detect_frame = frame._id
                             if self.__config.debug:
-                                self.__logger.debug(f"Tracker {vfaiframe._id} started.")
+                                self.__logger.debug(f"Tracker {frame._id} started.")
 
                             confidence = float(scores[i])
                             class_id = int(class_ids[i])
@@ -317,7 +317,7 @@ class VFAIEngine:
                                 2,
                             )
                             self.__event_dispatcher.dispatch_event(
-                                vfaiframe=vfaiframe,
+                                frame=frame,
                                 detection_id=detection_id,
                                 class_id=class_id,
                                 class_name=class_name,
@@ -349,7 +349,7 @@ class VFAIEngine:
                     MetricEvent(
                         stage="engine",
                         event="out",
-                        t_capture=vfaiframe._epoch,
+                        t_capture=frame._epoch,
                         t_start=t_start,
                         t_end=time.perf_counter(),
                     )

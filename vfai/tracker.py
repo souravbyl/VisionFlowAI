@@ -1,10 +1,10 @@
 import cv2
 import logging
-from vfaiconfig import VFAIConfig
+from vfai.config import Config
 
 
-class VFAITracker:
-    def __init__(self, config: VFAIConfig, description: str = "") -> None:
+class Tracker:
+    def __init__(self, config: Config, description: str = "") -> None:
         self.__config = config
         self.__tracker = None
 

@@ -1,4 +1,4 @@
-class VFAIFrame:
+class Frame:
     def __init__(
         self, id=0, data=None, since_start=None, epoch=None, metadata={}
     ) -> None:

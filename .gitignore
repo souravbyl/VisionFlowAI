@@ -207,7 +207,7 @@ marimo/_lsp/
 __marimo__/
 
 # venv
-VisionFlowAI/
+aienv/
 
 test/*.pt
 *.pt

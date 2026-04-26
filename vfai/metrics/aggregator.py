@@ -1,6 +1,6 @@
 import time
 from collections import defaultdict, deque
-from metrics.event import MetricEvent
+from vfai.metrics.event import MetricEvent
 
 
 class MetricsAggregator:

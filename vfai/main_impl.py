@@ -6,11 +6,11 @@ import signal
 import logging
 import threading
 from queue import Queue
-from vfailogger import LoggerManager
-from vfaiengine import VFAIEngine
-from config_loader import load_config
-from metrics.aggregator import MetricsAggregator
-from metrics.logger import aggregator_loop, logger_loop
+from vfai.loggermgr import LoggerManager
+from vfai.engine import Engine
+from vfai.config_loader import load_config
+from vfai.metrics.aggregator import MetricsAggregator
+from vfai.metrics.logger import aggregator_loop, logger_loop
 
 
 def engine_loader(config_file):
@@ -21,13 +21,13 @@ def engine_loader(config_file):
     config = load_config(config_file)
 
     # initialize logger
-    logger_mgr = LoggerManager(
+    loggermgr = LoggerManager(
         log_file="VisionFlowAI.log",
         level=config.loglevel,
         when="midnight",  # rotate daily
         backup_count=7,  # keep 7 days
     )
-    logger_mgr.start()
+    loggermgr.start()
 
     # logging related variables
     logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def engine_loader(config_file):
     ]
 
     # engine related variables
-    engine = VFAIEngine(config=config, metrics_q=metrics_q, stop_event=stop_event)
+    engine = Engine(config=config, metrics_q=metrics_q, stop_event=stop_event)
 
     # termination handle - start
     def shutdown(signum, frame):
@@ -68,7 +68,7 @@ def engine_loader(config_file):
         # exit log
         logger.info("exiting gracefully.")
         # on shutdown
-        logger_mgr.stop()
+        loggermgr.stop()
         sys.exit(0)
 
     # register signals

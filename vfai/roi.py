@@ -1,10 +1,10 @@
-from vfaicoordinate import VFAICoordinate
+from vfai.coordinate import Coordinate
 
 
-class VFAIROI:
+class ROI:
     def __init__(self) -> None:
-        self.__top_left = VFAICoordinate()
-        self.__bottom_right = VFAICoordinate()
+        self.__top_left = Coordinate()
+        self.__bottom_right = Coordinate()
 
     @property
     def top_left(self):

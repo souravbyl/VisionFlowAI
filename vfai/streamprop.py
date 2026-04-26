@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 
-class VFAIStreamProp:
-    def __init__(self, other: VFAIStreamProp | None = None) -> None:
+class StreamProperties:
+    def __init__(self, other: StreamProperties | None = None) -> None:
         self.__url: str = ""
         self.__height: int = 0
         self.__width: int = 0

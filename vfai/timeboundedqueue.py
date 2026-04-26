@@ -3,7 +3,7 @@ from queue import Queue
 from typing import Optional
 from collections import deque
 
-from metrics.event import MetricEvent
+from vfai.metrics.event import MetricEvent
 
 
 class TimeBoundedQueue:

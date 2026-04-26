@@ -1,13 +1,13 @@
 import yaml
 
-from vfaiconfig import VFAIConfig
+from vfai.config import Config
 
 
-def load_config(path: str) -> VFAIConfig:
+def load_config(path: str) -> Config:
     with open(path, "r") as f:
         data = yaml.safe_load(f)
 
-    cfg = VFAIConfig()
+    cfg = Config()
 
     # app
     cfg.debug = data["app"]["debug"]

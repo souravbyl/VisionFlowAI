@@ -28,21 +28,21 @@ VisionFlowAI is a real-time video processing engine that combines motion detecti
 
 ### System Flow
 ```
-VFAISource (Frame Grabbing)
+Source (Frame Grabbing)
     ├─ Opens VideoCapture from config URL
     ├─ Throttles frames (50% drop)
     └─ Enqueues valid frames to circular buffer
          ↓
-VFAIQueue (Circular Buffer)
+CQueue (Circular Buffer)
     ├─ Fixed-size circular queue (360k frames by default)
     └─ Returns frames to engine on demand
          ↓
-VFAIEngine (Main Processing Pipeline)
+Engine (Main Processing Pipeline)
     ├─ Dequeues frames from buffer
     ├─ Extracts ROI (Region of Interest)
     │
     ├─ Motion Detection Phase
-    │  ├─ VFAIMotion.get_grayscale() → converts to grayscale + Gaussian blur
+    │  ├─ Motion.get_grayscale() → converts to grayscale + Gaussian blur
     │  ├─ Frame differencing with previous frame
     │  ├─ Binary thresholding (threshold=25)
     │  ├─ Morphological operations (dilation)
@@ -51,17 +51,17 @@ VFAIEngine (Main Processing Pipeline)
     │  └─ Returns motion_roi if motion detected
     │
     ├─ Object Detection Phase (only if motion detected)
-    │  ├─ VFAIDetector.detect() → YOLO inference on motion_roi
+    │  ├─ Detector.detect() → YOLO inference on motion_roi
     │  ├─ Picks highest-confidence detection only
     │  ├─ Maps bbox back to full frame coordinates
     │  └─ Dispatches event if object found
     │
     └─ Tracking Phase (if tracking active)
-       ├─ VFAITracker.update() → updates tracker position
+       ├─ Tracker.update() → updates tracker position
        ├─ Falls back to motion detection if tracker fails
        └─ Forces re-detection after 5 seconds (redirect_interval)
              ↓
-VFAIEventDispatcher
+EventDispatcher
     ├─ Queues detection events
     ├─ Logs to metrics system
     └─ Triggers downstream handlers
@@ -71,7 +71,7 @@ VFAIEventDispatcher
 
 ## Component Details
 
-### 1. **VFAISource** (vfaisource.py)
+### 1. **Source** (source.py)
 **Purpose**: Captures frames from video source and enqueues them.
 
 **Key Operations**:
@@ -87,7 +87,7 @@ VFAIEventDispatcher
 
 ---
 
-### 2. **VFAIQueue** (vfaiqueue.py)
+### 2. **CQueue** (cqueue.py)
 **Purpose**: Circular FIFO queue for frame buffering.
 
 **Data Structure**:
@@ -103,7 +103,7 @@ VFAIEventDispatcher
 
 ---
 
-### 3. **VFAIMotion** (vfaimotion.py)
+### 3. **Motion** (motion.py)
 **Purpose**: Detects motion regions in video frames.
 
 **Algorithm**:
@@ -125,7 +125,7 @@ VFAIEventDispatcher
 
 ---
 
-### 4. **VFAIDetector** (vfaidetect.py - not provided but used)
+### 4. **Detector** (detector.py - not provided but used)
 **Purpose**: Runs YOLO object detection on motion regions.
 
 **Workflow**:
@@ -136,7 +136,7 @@ VFAIEventDispatcher
 
 ---
 
-### 5. **VFAITracker** (vfaitracker.py)
+### 5. **Tracker** (tracker.py)
 **Purpose**: Tracks detected objects across frames.
 
 **Supported Algorithms**:
@@ -153,7 +153,7 @@ VFAIEventDispatcher
 
 ---
 
-### 6. **VFAIEventDispatcher** (vfaievent_dispatcher.py - not provided but used)
+### 6. **EventDispatcher** (event_dispatcher.py - not provided but used)
 **Purpose**: Handles detection events (logging, alerts, callbacks).
 
 **Events Captured**:
@@ -167,39 +167,39 @@ VFAIEventDispatcher
 
 ### Detailed Frame Journey
 
-1. **Frame Grab** (VFAISource.__run_impl)
+1. **Frame Grab** (Source.__run_impl)
    ```
-   VideoCapture.read() → VFAIFrame(id, data, timestamp)
+   VideoCapture.read() → Frame(id, data, timestamp)
    Every 2nd frame: dropped
    Odd frames: enqueued
    ```
 
-2. **ROI Extraction** (VFAIEngine.__run_impl)
+2. **ROI Extraction** (Engine.__run_impl)
    ```
-   roiframe = vfaiframe._data[y1:y2, x1:x2]
+   roiframe = frame._data[y1:y2, x1:x2]
    (Crop to configured ROI region)
    ```
 
-3. **Motion Detection** (VFAIMotion.check_if_motion)
+3. **Motion Detection** (Motion.check_if_motion)
    ```
    grayscale → diff → threshold → dilate → contours → merge → bbox
    Output: motion_roi or None
    ```
 
-4. **Object Detection** (VFAIDetector.detect)
+4. **Object Detection** (Detector.detect)
    ```
    YOLO inference on motion_roi
    Output: Multiple detections, best picked
    ```
 
-5. **Tracking** (VFAITracker.update)
+5. **Tracking** (Tracker.update)
    ```
    Tracker updates position in roiframe
    If successful: continue tracking
    If failed: back to motion detection
    ```
 
-6. **Event Dispatch** (VFAIEventDispatcher.dispatch_event)
+6. **Event Dispatch** (EventDispatcher.dispatch_event)
    ```
    Queue event with metadata
    Trigger downstream handlers
@@ -212,7 +212,7 @@ VFAIEventDispatcher
 ### **HIGH PRIORITY**
 
 #### 1. Single Object Per Motion Region
-**Issue**: [vfaiengine.py](vfaiengine.py#L270)
+**Issue**: [engine.py](engine.py#L270)
 ```python
 i = np.argmax(scores)  # Only highest-confidence detection
 ```
@@ -225,7 +225,7 @@ i = np.argmax(scores)  # Only highest-confidence detection
 ---
 
 #### 2. Hardcoded 50% Frame Drop
-**Issue**: [vfaisource.py](vfaisource.py#L88-L93)
+**Issue**: [source.py](source.py#L88-L93)
 ```python
 if self.__frame_count % 2 == 0:
     self.__metrics_q.put(MetricEvent("grabber", "drop", ...))
@@ -242,9 +242,9 @@ else:
 ---
 
 #### 3. No Multi-Object Tracking
-**Issue**: [vfaiengine.py](vfaiengine.py#L295-L301)
+**Issue**: [engine.py](engine.py#L295-L301)
 ```python
-tracker = VFAITracker(...)  # Single tracker per frame
+tracker = Tracker(...)  # Single tracker per frame
 ```
 **Problem**:
 - One tracker per scene, not per object
@@ -258,7 +258,7 @@ tracker = VFAITracker(...)  # Single tracker per frame
 ### **MEDIUM PRIORITY**
 
 #### 4. Hardcoded Motion Detection Parameters
-**Issue**: [vfaimotion.py](vfaimotion.py#L24, #L37, #L48)
+**Issue**: [motion.py](motion.py#L24, #L37, #L48)
 ```python
 _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)  # threshold=25
 if area < 500:  # contour area
@@ -275,7 +275,7 @@ pad = 40  # bbox padding
 ---
 
 #### 5. Fixed 5-Second Re-detection Interval
-**Issue**: [vfaiengine.py](vfaiengine.py#L82)
+**Issue**: [engine.py](engine.py#L82)
 ```python
 redirect_interval = self.__config.source.fps * 5
 ```
@@ -289,7 +289,7 @@ redirect_interval = self.__config.source.fps * 5
 ---
 
 #### 6. Queue Overflow Silent Failure
-**Issue**: [vfaiqueue.py](vfaiqueue.py#L7-L11)
+**Issue**: [cqueue.py](cqueue.py#L7-L11)
 ```python
 if self.front == (self.rear + 1) % self.size:
     self.__logger.fatal("Queue is full, might lead to drop.")
@@ -318,9 +318,9 @@ if self.front == (self.rear + 1) % self.size:
 ### **LOW PRIORITY**
 
 #### 8. Polling Sleep Pattern
-**Issue**: [vfaiengine.py](vfaiengine.py#L94-L97)
+**Issue**: [engine.py](engine.py#L94-L97)
 ```python
-if vfaiframe is None:
+if frame is None:
     time.sleep(0.001)
     continue
 ```
@@ -338,7 +338,7 @@ if vfaiframe is None:
 
 #### Fix: Process All Detections Above Confidence Threshold
 
-**File**: `vfaiengine.py`
+**File**: `engine.py`
 
 **Changes**:
 1. Replace single object logic with multi-object processing
@@ -349,8 +349,8 @@ if vfaiframe is None:
 **Implementation**:
 
 ```python
-# In VFAIEngine.__init__
-self.__active_trackers = {}  # {tracker_id: VFAITracker}
+# In Engine.__init__
+self.__active_trackers = {}  # {tracker_id: Tracker}
 self.__next_tracker_id = 0
 self.__tracker_iou_threshold = 0.3  # config
 
@@ -424,7 +424,7 @@ def __match_and_track(self, current_detections, roiframe, motion_x, motion_y):
         det = current_detections[idx]
         dx1, dy1, dx2, dy2 = det['bbox']
         
-        tracker = VFAITracker(self.__config, description=f"tracker_{self.__next_tracker_id}")
+        tracker = Tracker(self.__config, description=f"tracker_{self.__next_tracker_id}")
         tracker.init(roiframe, (dx1, dy1, dx2 - dx1, dy2 - dy1))
         
         self.__active_trackers[self.__next_tracker_id] = tracker
@@ -432,7 +432,7 @@ def __match_and_track(self, current_detections, roiframe, motion_x, motion_y):
         
         # Dispatch event
         self.__event_dispatcher.dispatch_event(
-            vfaiframe=vfaiframe,
+            frame=frame,
             detection_id=self.__next_tracker_id,
             class_id=det['class_id'],
             class_name=det['class_name'],
@@ -463,7 +463,7 @@ def __compute_iou(self, box1, box2):
     return inter_area / union_area if union_area > 0 else 0
 ```
 
-**Config Additions** (vfaiconfig.py):
+**Config Additions** (config.py):
 ```yaml
 detection_confidence_threshold: 0.5  # minimum confidence to process
 tracker_iou_threshold: 0.3  # IOU threshold for detection-tracker matching
@@ -475,12 +475,12 @@ tracker_iou_threshold: 0.3  # IOU threshold for detection-tracker matching
 
 #### Fix: Replace Hardcoded 50% Drop with Smart Throttling
 
-**File**: `vfaisource.py`
+**File**: `source.py`
 
 **Changes**:
 
 ```python
-# In VFAISource.__init__
+# In Source.__init__
 self.__frame_drop_rate = config.frame_drop_rate  # 0.0 = no drop, 0.5 = 50% drop
 
 # In __run_impl, replace:
@@ -499,7 +499,7 @@ else:
     self.__frame_queue.enqueue(vframe)
 ```
 
-**Config Additions** (vfaiconfig.py):
+**Config Additions** (config.py):
 ```yaml
 frame_drop_rate: 0.0  # 0.0 = no drop, 0.5 = 50%, 1.0 = drop all
 ```
@@ -515,12 +515,12 @@ frame_drop_rate: 0.0  # 0.0 = no drop, 0.5 = 50%, 1.0 = drop all
 
 #### Fix: Move Hardcoded Values to Config
 
-**File**: `vfaimotion.py`
+**File**: `motion.py`
 
 **Changes**:
 
 ```python
-# In VFAIMotion.__init__
+# In Motion.__init__
 self.__motion_threshold = config.motion.threshold  # 25
 self.__min_contour_area = config.motion.min_contour_area  # 500
 self.__bbox_padding = config.motion.bbox_padding  # 40
@@ -543,7 +543,7 @@ def check_if_motion(self, gray, w, h):
     pad = self.__bbox_padding
 ```
 
-**Config Additions** (vfaiconfig.py):
+**Config Additions** (config.py):
 ```yaml
 motion:
   threshold: 25
@@ -559,12 +559,12 @@ motion:
 
 #### Fix: Replace Fixed Interval with Confidence-Based Trigger
 
-**File**: `vfaiengine.py`
+**File**: `engine.py`
 
 **Changes**:
 
 ```python
-# In VFAIEngine.__init__
+# In Engine.__init__
 self.__tracker_confidence_threshold = config.tracker_confidence_threshold  # 0.7
 self.__max_tracking_age = config.max_tracking_age  # frames
 self.__tracker_ages = {}  # {tracker_id: age}
@@ -585,7 +585,7 @@ for tracker_id, tracker in list(self.__active_trackers.items()):
     # (rest of matching logic)
 ```
 
-**Config Additions** (vfaiconfig.py):
+**Config Additions** (config.py):
 ```yaml
 tracker_confidence_threshold: 0.7
 max_tracking_age: 300  # frames (e.g., 10 seconds at 30 FPS)
@@ -651,12 +651,12 @@ class TimeBoundedQueue:
         return None
 ```
 
-**Config Additions** (vfaiconfig.py):
+**Config Additions** (config.py):
 ```yaml
 queue:
   max_age_sec: 5.0
   max_size: 100
-  type: "TimeBoundedQueue"  # or "VFAIQueue" for legacy
+  type: "TimeBoundedQueue"  # or "CQueue" for legacy
 ```
 
 ---
@@ -665,7 +665,7 @@ queue:
 
 #### Fix: Replace Sleep-Based Polling with Threading Events
 
-**File**: `vfaiqueue.py`
+**File**: `cqueue.py`
 
 **Changes**:
 
@@ -674,7 +674,7 @@ import logging
 import threading
 
 
-class VFAIQueue:
+class CQueue:
     def __init__(self, size):
         self.size = size
         self.queue = [None] * self.size
@@ -710,7 +710,7 @@ class VFAIQueue:
         self.__not_empty.wait(timeout)
 ```
 
-**Engine Changes** (vfaiengine.py):
+**Engine Changes** (engine.py):
 
 ```python
 # Replace polling loop:
@@ -719,8 +719,8 @@ while not self.__stop_event.is_set():
         if cv2.waitKey(1) == ord("q"):
             pass
     
-    vfaiframe = self.__source.get_frame()
-    if vfaiframe is None:
+    frame = self.__source.get_frame()
+    if frame is None:
         time.sleep(0.001)
         continue
 
@@ -730,8 +730,8 @@ while not self.__stop_event.is_set():
         if cv2.waitKey(1) == ord("q"):
             pass
     
-    vfaiframe = self.__source.get_frame()
-    if vfaiframe is None:
+    frame = self.__source.get_frame()
+    if frame is None:
         self.__frame_queue.wait_for_frame(timeout=0.1)
         continue
 ```

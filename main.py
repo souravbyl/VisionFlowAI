@@ -1,6 +1,6 @@
 import os
 import argparse
-from main_impl import engine_loader
+from vfai.main_impl import engine_loader
 
 
 def main():

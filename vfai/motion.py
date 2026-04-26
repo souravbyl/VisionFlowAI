@@ -1,12 +1,12 @@
 import cv2
 import numpy as np
 
-from cv_util import CV_Show
-from vfaiconfig import VFAIConfig
+from vfai.cv_util import CV_Show
+from vfai.config import Config
 
 
-class VFAIMotion:
-    def __init__(self, config: VFAIConfig) -> None:
+class Motion:
+    def __init__(self, config: Config) -> None:
         self.__config = config
         self.__prev_gray = None
         self.__kernel = np.ones((3, 3), np.uint8)
@@ -71,7 +71,7 @@ class VFAIMotion:
             merged_bbox = (x_min, y_min, x_max - x_min, y_max - y_min)
 
             # Add padding
-            pad = 40
+            pad = 20
             x, y, w, h = merged_bbox
 
             x = max(0, x - pad)

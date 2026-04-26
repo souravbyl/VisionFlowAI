@@ -1,4 +1,4 @@
-class VFAIFrameBuffer:
+class FrameBuffer:
     def __init__(self):
         self._frame = None
         self._version = 0
