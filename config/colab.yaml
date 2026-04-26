@@ -1,0 +1,31 @@
+app:
+  debug: false
+
+display:
+  imshow_source_frames: false
+  imshow_detection_results: false
+  imshow_motion_threshold: false
+
+event:
+  dump_path: ""
+
+model:
+  name: yolov8n.pt
+  threshold: 0.3
+
+source:
+  url: "C:/Users/soura/Downloads/surveillance_videos/sb/Channel ID_20_1.mp4"
+  reconnect_on_failure: false
+  roi:
+    enabled: false
+    x1: null
+    y1: null
+    x2: null
+    y2: null
+
+motion:
+  percent: 0.001
+
+tracker:
+  enabled: true
+  name: cv2_TrackerCSRT

@@ -1,97 +1,116 @@
-import cv2
 import json
-import time
 import logging
+import os
 import threading
+import time
+
+import cv2
+
 from vfaiconfig import VFAIConfig
 from vfaiqueue import VFAIQueue
 
 
 class VFAIEventDispatcher:
-    def __init__(self, config: VFAIConfig, qsize: int=10, name: str="VFAIEventDispatcher") -> None:
+    def __init__(
+        self,
+        config: VFAIConfig,
+        stop_event: threading.Event,
+        qsize: int = 10,
+        name: str = "VFAIEventDispatcher",
+    ) -> None:
         # class internals
         self.__name: str = name
 
-        #config
+        # config
         self.__config = config
 
         # thread/event related
         self.__thread = None
-        self.__stop_event = threading.Event()
-        self.__stop_called = False
+        self.__stop_event = stop_event
 
         # event queue
         self.__event_queue = VFAIQueue(qsize)
 
-        self.__logger = logging.getLogger(f'{__name__}')
-    
-    def dispatch_event(self, vfaiframe, detection_id, class_id, class_name, confidence, eventtime, snap, bbox):
+        self.__logger = logging.getLogger(f"{__name__}")
+
+        # create directory if not exist
+        if self.__config.event_dump_path:
+            os.makedirs(self.__config.event_dump_path, exist_ok=True)
+
+    def dispatch_event(
+        self,
+        vfaiframe,
+        detection_id,
+        class_id,
+        class_name,
+        confidence,
+        eventtime,
+        snap,
+        bbox,
+    ):
         event = {
-            'id': detection_id,
-            'class_name': class_name,
-            'class_id': class_id,
-            'confidence': f'{confidence:.2f}',
-            "since_start": f'{vfaiframe._since_start:.2f}',
-            "epoch": f'{vfaiframe._epoch:.0f}',
-            "detected_at": f'{eventtime:.0f}',
-            'input_frame_id': f'{vfaiframe._id}',
-            'snap': snap
+            "id": detection_id,
+            "class_name": class_name,
+            "class_id": class_id,
+            "confidence": f"{confidence:.2f}",
+            "since_start": f"{vfaiframe._since_start:.2f}",
+            "epoch": f"{vfaiframe._epoch:.0f}",
+            "detected_at": f"{eventtime:.0f}",
+            "input_frame_id": f"{vfaiframe._id}",
+            "snap": snap,
         }
         self.__event_queue.enqueue(event)
 
     def start(self):
         if self.__thread and self.__thread.is_alive():
             return
-        self.__stop_event.clear()
         self.__thread = threading.Thread(target=self.__run, name=self.__name)
         self.__thread.start()
 
-    def stop(self):
-        if not self.__stop_called:
-            self.__stop_called = True
-            self.__stop()
-            self.__stop_called = False
+    def join(self):
+        if self.__thread:
+            self.__thread.join()
 
     def __run(self):
         try:
             self.__run_impl()
         finally:
+            self.__stop()
             self.__cleanup()
 
     def __stop(self):
-        self.__stop_event.set()
-        if self.__thread:
-            self.__thread.join()
-        self.__thread = None
+        if not self.__stop_event.is_set():
+            self.__stop_event.set()
 
     def __cleanup(self):
         pass
 
     def __run_impl(self):
-        start = time.time()
-        if self.__config.verbose:
-            self.__logger.debug(f'Dispatcher thread started at {start}')
+        start = time.perf_counter()
+        if self.__config.debug:
+            self.__logger.debug(f"Dispatcher thread started at {start}")
         try:
             while not self.__stop_event.is_set():
                 event = self.__event_queue.dequeue()
                 if event is None:
                     continue
-                
-                snap = event['snap']
-                event.pop('snap', None)
+
+                snap = event["snap"]
+                event.pop("snap", None)
                 event_str = json.dumps(event)
                 self.__logger.info(event_str)
-                
+
                 # Dump image and json
-                if self.__config.dump_results:
-                    fname = f"F{event['input_frame_id']}-D{event['id']}_C{event['class_name']}-P{event['confidence']}"
-                    if len(self.__config.results_dump_path) > 0:
-                        fname = f"{self.__config.results_dump_path}/{fname}"
-                    cv2.imwrite(f"{fname}.jpg", snap)
-                    with open(f"{fname}.json", "w") as f:
-                        json.dump(event, f)
-                        if self.__config.verbose:
-                            self.__logger.info(f'Detection saved in {fname}.json')
+                event_snap_file = f"F{event['input_frame_id']}-D{event['id']}_C{event['class_name']}-P{event['confidence']}"
+                if self.__config.event_dump_path:
+                    event_snap_file = (
+                        f"{self.__config.event_dump_path}/{event_snap_file}"
+                    )
+                cv2.imwrite(f"{event_snap_file}.jpg", snap)
+                with open(f"{event_snap_file}.json", "w") as f:
+                    json.dump(event, f)
+                    if self.__config.debug:
+                        self.__logger.info(f"Detection saved in {event_snap_file}.json")
         finally:
-            if self.__config.verbose:
-                self.__logger.debug(f'Dispatcher thread ended at {time.time()}')
+            if self.__config.debug:
+                self.__logger.debug(f"Dispatcher thread ended at {time.perf_counter()}")
