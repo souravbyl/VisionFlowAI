@@ -24,7 +24,8 @@ class Detector:
 
     def detect(self, frame):
         verbose = True if self.__config.debug and self.__config.loglevel == logging.DEBUG else False
-        return self.__model(frame, verbose, conf=self.__config.threshold)
+        # return self.__model(frame, verbose, conf=self.__config.threshold)
+        return self.__model(frame, verbose, conf=self.__config.threshold, classes=[0, 7])   # person, truck
 
     def get_class_name(self, cls_id):
         return self.__model.names[cls_id]

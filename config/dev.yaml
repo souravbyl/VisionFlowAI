@@ -1,6 +1,6 @@
 app:
   debug: true
-  loglevel: d
+  loglevel: i
 
 display:
   imshow_source_frames: true

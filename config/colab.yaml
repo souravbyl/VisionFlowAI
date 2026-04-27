@@ -1,10 +1,13 @@
 app:
-  debug: false
+  debug: true
+  loglevel: d
 
 display:
   imshow_source_frames: false
-  imshow_detection_results: false
   imshow_motion_threshold: false
+  imshow_motion_results: false
+  imshow_tracker_results: false
+  imshow_detection_results: false
 
 event:
   dump_path: ""
@@ -14,7 +17,7 @@ model:
   threshold: 0.3
 
 source:
-  url: "C:/Users/soura/Downloads/surveillance_videos/sb/Channel ID_20_1.mp4"
+  url: "Channel ID_18_3.mp4"
   reconnect_on_failure: false
   roi:
     enabled: false
@@ -24,7 +27,7 @@ source:
     y2: null
 
 motion:
-  percent: 0.001
+  percent: 0.002
 
 tracker:
   enabled: true

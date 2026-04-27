@@ -202,13 +202,12 @@ class Engine:
                         and tracking
                         and tracker is not None
                     ):
-                        ok, trackerbbox = tracker.update(roiframe)
+                        ok, trackerbbox = tracker.update(motion_roi)
                         if ok:
                             if frame._id - last_detect_frame > redirect_interval:
-                                self.__logger.debug(
-                                    "tracker left for redirection reason"
-                                )
+                                self.__logger.debug("tracker left for redirection reason")
                                 tracking = False
+                                tracker = None
                             else:
                                 if self.__config.debug:
                                     self.__logger.debug("tracking..")
@@ -218,6 +217,7 @@ class Engine:
                             if self.__config.debug:
                                 self.__logger.debug("tracker left as new object")
                             tracking = False
+                            tracker = None
                 finally:
                     if self.__config.debug:
                         if ok and trackerbbox is not None:
@@ -240,7 +240,7 @@ class Engine:
                 # perform object detection
                 object_detected = False
                 try:
-                    if not tracking and bbox:
+                    if not tracking and motion_roi:
 
                         if self.__config.debug:
                             self.__logger.debug("Calling detector")
@@ -281,29 +281,19 @@ class Engine:
                             dx1, dy1, dx2, dy2 = boxes[i]
                             dx1, dy1, dx2, dy2 = int(dx1), int(dy1), int(dx2), int(dy2)
 
+                            # -------- INIT TRACKER --------
+                            tracker = Tracker(self.__config, description=f"tracker_{frame._id}")
+                            tracker.init(motion_roi, (dx1, dy1, int(dx2 - dx1), int(dy2 - dy1)))
+                            tracking = True
+                            last_detect_frame = frame._id
+                            if self.__config.debug:
+                                self.__logger.debug(f"Tracker {frame._id} started.")
+
                             # map to roiframe
                             dx1_full = int(motion_x + dx1)
                             dy1_full = int(motion_y + dy1)
                             dx2_full = int(motion_x + dx2)
                             dy2_full = int(motion_y + dy2)
-
-                            # -------- INIT TRACKER --------
-                            tracker = Tracker(
-                                self.__config, description=f"tracker_{frame._id}"
-                            )
-                            tracker.init(
-                                roiframe,
-                                (
-                                    dx1_full,
-                                    dy1_full,
-                                    int(dx2_full - dx1_full),
-                                    int(dy2_full - dy1_full),
-                                ),
-                            )
-                            tracking = True
-                            last_detect_frame = frame._id
-                            if self.__config.debug:
-                                self.__logger.debug(f"Tracker {frame._id} started.")
 
                             confidence = float(scores[i])
                             class_id = int(class_ids[i])

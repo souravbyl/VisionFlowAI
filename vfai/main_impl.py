@@ -22,7 +22,7 @@ def engine_loader(config_file):
 
     # initialize logger
     loggermgr = LoggerManager(
-        log_file="VisionFlowAI.log",
+        log_file="logs/VisionFlowAI.log",
         level=config.loglevel,
         when="midnight",  # rotate daily
         backup_count=7,  # keep 7 days

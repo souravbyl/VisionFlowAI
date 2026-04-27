@@ -129,7 +129,7 @@ class Source:
                             frame, (self.__config.target.width, self.__config.target.height)
                         )
                     self.__frame_count += 1
-                    if self.__frame_count % 2 == 0:
+                    if self.__frame_count % 2 == 0 or self.__frame_count % 3 == 0:
                         self.__metrics_q.put(MetricEvent("grabber", "drop", t_end=time.perf_counter()))
                     else:
                         # self.__frame_queue.write(vframe)
